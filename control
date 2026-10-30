@@ -1,0 +1,7 @@
+Package: com.yourname.waios2gdrive
+Name: waios2gdrive
+Depends: mobilesubstrate
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Injectable Google Drive sharing option for sideloaded WhatsApp.
+Maintainer: Developer
