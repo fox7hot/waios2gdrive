@@ -28,7 +28,7 @@ jobs:
         make package FINALPACKAGE=1
         
     - name: Upload Compiled Binary Artifacts
-      uses: actions/actions-artifact@v4
+      uses: actions/upload-artifact@v4
       with:
-        name: WhatsAppGDriveMod-Binary
-        path: .theos/obj/debug/WhatsAppGDriveMod.dylib
+        name: waios2gdrive-Binary
+        path: .theos/obj/debug/waios2gdrive.dylib
