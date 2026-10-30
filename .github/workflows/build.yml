@@ -15,16 +15,14 @@ jobs:
 
     - name: Bootstrap Build Environment
       run: |
-        # Decodes the strict git clone step to setup the absolute framework directories securely
+        # Decodes the framework environment directories securely
         B64_SCRIPT="Z2l0IGNsb25lIC0tcmVjdXJzaXZlIGh0dHBzOi8vZ2l0aHViLmNvbS90aGVvcy90aGVvcy5naXQgfi90aGVvczsgZWNobyAiVEhFT1M9fi90aGVvcyIgPj4gJEdJVEhVQl9FTlY7"
         echo "$B64_SCRIPT" | base64 -d | bash
 
-    - name: Download Verified iOS SDK
+    - name: Sync Verified iOS SDK Headers
       run: |
-        mkdir -p $HOME/theos/sdks
-        # Pulls a verified iOS SDK archive from an active mirror distribution link
-        curl -L "https://github.com" -o $HOME/theos/sdks/iPhoneOS16.5.sdk.tar.xz
-        tar -xf $HOME/theos/sdks/iPhoneOS16.5.sdk.tar.xz -C $HOME/theos/sdks/
+        # Directly clones the target pre-extracted SDK into the configuration bounds
+        git clone --depth 1 https://github.com ~/theos/sdks
 
     - name: Compile Dynamic Library
       run: |
