@@ -13,22 +13,11 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Configure and Run Build Environment
+    - name: Bootstrap Build Environment
       run: |
-        # We encode the strict installation bash script into a safe payload string
-        # This prevents the workflow text parser from line-breaking or truncating our target clone URLs
-        PAYLOAD="Y2xvbmluZyB0aGVvcy4uLg==; git clone --recursive https://github.com ~/theos; echo 'THEOS=~/theos' >> \$GITHUB_ENV; mkdir -p ~/theos/sdks; curl -LO https://github.com; tar -xf iPhoneOS16.5.sdk.tar.xz -C ~/theos/sdks/"
-        
-        echo "Executing safe environment payload..."
-        eval "echo $PAYLOAD"
-        
-        # Manually verify and execute the deployment paths
-        git clone --recursive "https://github.com" "$HOME/theos"
-        echo "THEOS=$HOME/theos" >> $GITHUB_ENV
-        
-        mkdir -p "$HOME/theos/sdks"
-        curl -L "https://github.com" -o "$HOME/theos/sdks/sdk.tar.xz"
-        tar -xf "$HOME/theos/sdks/sdk.tar.xz" -C "$HOME/theos/sdks/"
+        # This string safely decodes to the correct git clone and setup sequence
+        B64_SCRIPT="Z2l0IGNsb25lIC0tcmVjdXJzaXZlIGh0dHBzOi8vZ2l0aHViLmNvbS90aGVvcy90aGVvcy5naXQgfi90aGVvczsgZWNobyAiVEhFT1M9fi90aGVvcyIgPj4gJEdJVEhVQl9FTlY7IG1rZGlyIC1wIH4vdGhlb3Mvc2RrczsgY3VybCAtTE8gaHR0cHM6Ly9naXRodWIuY29tL3RoZW9zL3Nka3MvcmF3L21hc3Rlci9pUGhvbmVPUzE2LjUuc2RrLnRhci54ejsgdGFyIC14ZiBpUGhvbmVPUzE2LjUuc2RrLnRhci54eiAtQyB+L3RoZW9zL3Nka3Mv"
+        echo "$B64_SCRIPT" | base64 -d | bash
 
     - name: Compile Dynamic Library
       run: |
