@@ -1,4 +1,4 @@
-name: Compile iOS Tweak
+name: Build iOS Dynamic Library
 
 on:
   push:
@@ -10,27 +10,38 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Bootstrap Build Environment
-      run: |
-        # Decodes the framework environment directories securely
-        B64_SCRIPT="Z2l0IGNsb25lIC0tcmVjdXJzaXZlIGh0dHBzOi8vZ2l0aHViLmNvbS90aGVvcy90aGVvcy5naXQgfi90aGVvczsgZWNobyAiVEhFT1M9fi90aGVvcyIgPj4gJEdJVEhVQl9FTlY7"
-        echo "$B64_SCRIPT" | base64 -d | bash
+      - name: Install Theos
+        shell: bash
+        run: |
+          git clone --depth 1 --recursive https://github.com/theos/theos.git "$HOME/theos"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
 
-    - name: Sync Verified iOS SDK Headers
-      run: |
-        # Directly clones the target pre-extracted SDK into the configuration bounds
-        git clone --depth 1 https://github.com ~/theos/sdks
+      - name: Install iOS SDKs
+        shell: bash
+        run: |
+          mkdir -p "$HOME/theos/sdks"
+          git clone --depth 1 https://github.com/theos/sdks.git "$HOME/theos/sdks"
 
-    - name: Compile Dynamic Library
-      run: |
-        export THEOS=$HOME/theos
-        make package FINALPACKAGE=1
-        
-    - name: Upload Compiled Binary Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: waios2gdrive-Binary
-        path: .theos/obj/debug/waios2gdrive.dylib
+      - name: Build dynamic library
+        shell: bash
+        run: |
+          set -o pipefail
+          make clean
+          make
+          mkdir -p build
+          find . -path './.git' -prune -o -type f -name '*.dylib' -print -exec cp '{}' build/ \;
+          if ! find build -maxdepth 1 -type f -name '*.dylib' -print -quit | grep -q .; then
+            echo "Build completed but no dylib artifact was found."
+            exit 1
+          fi
+          ls -lh build/
+
+      - name: Upload dynamic library
+        uses: actions/upload-artifact@v4
+        with:
+          name: WA2Drive-dylib
+          path: build/*.dylib
+          if-no-files-found: error
