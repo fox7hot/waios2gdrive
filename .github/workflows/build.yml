@@ -22,13 +22,21 @@ jobs:
       - name: Install iOS SDKs
         shell: bash
         run: |
-          mkdir -p "$HOME/theos/sdks"
-          git clone --depth 1 https://github.com/theos/sdks.git "$HOME/theos/sdks"
+          # The Theos checkout may already contain an empty sdks directory.
+          # Clone to a temporary path, then replace that directory.
+          git clone --depth 1 https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
+          rm -rf "$HOME/theos/sdks"
+          mv "$RUNNER_TEMP/theos-sdks" "$HOME/theos/sdks"
+          test -d "$HOME/theos/sdks/iPhoneOS.sdk" || {
+            echo "Expected iPhoneOS.sdk was not found in the SDK repository."
+            find "$HOME/theos/sdks" -maxdepth 2 -type d | head -50
+            exit 1
+          }
 
       - name: Build dynamic library
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           make clean
           make
           mkdir -p build
