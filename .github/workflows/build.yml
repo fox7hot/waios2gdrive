@@ -19,6 +19,12 @@ jobs:
           git clone --depth 1 --recursive https://github.com/theos/theos.git "$HOME/theos"
           echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
 
+      - name: Install signing utility
+        shell: bash
+        run: |
+          brew install ldid
+          command -v ldid
+
       - name: Install iOS SDKs
         shell: bash
         run: |
