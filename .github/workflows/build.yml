@@ -15,11 +15,12 @@ jobs:
 
     - name: Set up Theos Environment
       run: |
-        bash -c "$(curl -fsSL https://githubusercontent.com)"
+        git clone --recursive https://github.com ~/theos
         echo "THEOS=~/theos" >> $GITHUB_ENV
         
     - name: Download iOS SDK Headers
       run: |
+        mkdir -p ~/theos/sdks
         curl -LO https://github.com
         tar -xf iPhoneOS16.5.sdk.tar.xz -C ~/theos/sdks/
         
