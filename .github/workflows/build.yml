@@ -1,0 +1,34 @@
+name: Compile iOS Tweak
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Theos Environment
+      run: |
+        bash -c "$(curl -fsSL https://githubusercontent.com)"
+        echo "THEOS=~/theos" >> $GITHUB_ENV
+        
+    - name: Download iOS SDK Headers
+      run: |
+        curl -LO https://github.com
+        tar -xf iPhoneOS16.5.sdk.tar.xz -C ~/theos/sdks/
+        
+    - name: Compile Dynamic Library
+      run: |
+        make package FINALPACKAGE=1
+        
+    - name: Upload Compiled Binary Artifacts
+      uses: actions/actions-artifact@v4
+      with:
+        name: WhatsAppGDriveMod-Binary
+        path: .theos/obj/debug/WhatsAppGDriveMod.dylib
