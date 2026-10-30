@@ -1,51 +1,126 @@
-#import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
+#import <dispatch/dispatch.h>
 
-// Hooking into WhatsApp's primary Chat Backup interface controller
-%hook WA_ChatBackupSettingsViewController
+static NSString * const WA2DriveLogPrefix = @"[WA2Drive]";
 
-- (void)viewDidLoad {
-    // Run the native WhatsApp loading layout routine first
-    %orig;
-    
-    // Construct the custom Google Drive routing element
-    UIButton *gDriveButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [gDriveButton setTitle:@"Sideload Backup: Google Drive" forState:UIControlStateNormal];
-    gDriveButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    gDriveButton.backgroundColor = [UIColor colorWithRed:0.22 green:0.46 blue:0.84 alpha:1.0]; // Google Brand Blue
-    [gDriveButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    gDriveButton.layer.cornerRadius = 10.0;
-    
-    // Position the layout element cleanly below the standard iCloud layout structures
-    gDriveButton.frame = CGRectMake(20, 450, self.view.frame.size.width - 40, 52);
-    
-    // Attach the backup sequence click target
-    [gDriveButton addTarget:self action:@selector(triggerSideloadedBackupSequence) forControlEvents:UIControlEventTouchUpInside];
-    
-    // Inject the new button view component into the runtime hierarchy
-    [self.view addSubview:gDriveButton];
+static void WA2DriveLog(NSString *message) {
+    NSLog(@"%@ %@", WA2DriveLogPrefix, message);
 }
 
-%new
-- (void)triggerSideloadedBackupSequence {
-    // Locate the local encrypted database file inside this sideload sandbox app group container
-    NSString *docsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
-    NSString *sqlitePath = [docsPath stringByAppendingPathComponent:@"ChatStorage.sqlite"];
-    
-    if ([[NSFileManager defaultManager] fileExistsAtPath:sqlitePath]) {
-        // Expose the raw file structure directly to the native iOS system share controllers
-        NSURL *fileURL = [NSURL fileURLWithPath:sqlitePath];
-        UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[fileURL] applicationActivities:nil];
-        
-        // Render the system sheet allowing user to target the Google Drive app directly
-        [self presentViewController:activityVC animated:YES completion:nil];
-    } else {
-        // Fallback warning dialog handler if target database indexing fails or is sandboxed out of reach
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Backup Error" 
-                                                                       message:@"Database file not found in sideloaded sandbox container." 
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertController actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
+static BOOL WA2DriveCheckFile(NSString *directory, NSString *filename) {
+    if (directory.length == 0) {
+        return NO;
+    }
+
+    NSString *candidate = [directory stringByAppendingPathComponent:filename];
+    BOOL isDirectory = NO;
+    BOOL exists = [[NSFileManager defaultManager] fileExistsAtPath:candidate
+                                                       isDirectory:&isDirectory];
+
+    WA2DriveLog([NSString stringWithFormat:@"check %@ exists=%@ directory=%@",
+                 candidate,
+                 exists ? @"YES" : @"NO",
+                 isDirectory ? @"YES" : @"NO"]);
+    return exists && !isDirectory;
+}
+
+/*
+ Diagnostic-only bootstrap.
+
+ This library deliberately does not hook private WhatsApp classes, modify the
+ WhatsApp UI, or assume that ChatStorage.sqlite is stored in Documents.
+
+ A loaded dylib inherits the effective sandbox and entitlements of its host
+ process. It does not gain app-group or cross-container access by injection.
+ */
+
+static void WA2DriveWriteDiagnostics(void) {
+    @autoreleasepool {
+        NSBundle *bundle = [NSBundle mainBundle];
+        NSString *bundleID = bundle.bundleIdentifier ?: @"<unknown>";
+        NSString *home = NSHomeDirectory();
+        NSFileManager *fm = [NSFileManager defaultManager];
+
+        NSURL *documentsURL = [[fm URLsForDirectory:NSDocumentDirectory
+                                          inDomains:NSUserDomainMask] firstObject];
+        NSURL *libraryURL = [[fm URLsForDirectory:NSLibraryDirectory
+                                        inDomains:NSUserDomainMask] firstObject];
+        NSURL *cachesURL = [[fm URLsForDirectory:NSCachesDirectory
+                                        inDomains:NSUserDomainMask] firstObject];
+
+        NSMutableArray<NSString *> *lines = [NSMutableArray array];
+        [lines addObject:@"WA2Drive diagnostic probe"];
+        [lines addObject:[NSString stringWithFormat:@"bundle_id=%@", bundleID]];
+        [lines addObject:[NSString stringWithFormat:@"home=%@", home]];
+        [lines addObject:[NSString stringWithFormat:@"documents=%@",
+                          documentsURL.path ?: @"<unavailable>"]];
+        [lines addObject:[NSString stringWithFormat:@"library=%@",
+                          libraryURL.path ?: @"<unavailable>"]];
+        [lines addObject:[NSString stringWithFormat:@"caches=%@",
+                          cachesURL.path ?: @"<unavailable>"]];
+
+        NSMutableArray<NSString *> *candidateDirectories = [NSMutableArray array];
+        if (documentsURL.path.length > 0) {
+            [candidateDirectories addObject:documentsURL.path];
+        }
+        if (libraryURL.path.length > 0) {
+            [candidateDirectories addObject:[libraryURL.path stringByAppendingPathComponent:@"Application Support"]];
+            [candidateDirectories addObject:libraryURL.path];
+        }
+
+        BOOL foundDatabase = NO;
+        for (NSString *directory in candidateDirectories) {
+            NSString *candidate = [directory stringByAppendingPathComponent:@"ChatStorage.sqlite"];
+            BOOL found = WA2DriveCheckFile(directory, @"ChatStorage.sqlite");
+            [lines addObject:[NSString stringWithFormat:@"database_candidate=%@ found=%@",
+                              candidate, found ? @"YES" : @"NO"]];
+            foundDatabase = foundDatabase || found;
+        }
+
+        [lines addObject:[NSString stringWithFormat:@"database_found_in_host_container=%@",
+                          foundDatabase ? @"YES" : @"NO"]];
+        [lines addObject:@"note=No app-group discovery or cross-container access is attempted."];
+
+        if (cachesURL.path.length > 0) {
+            NSString *reportDirectory = [cachesURL.path stringByAppendingPathComponent:@"WA2Drive"];
+            NSError *directoryError = nil;
+            [fm createDirectoryAtPath:reportDirectory
+          withIntermediateDirectories:YES
+                           attributes:nil
+                                error:&directoryError];
+
+            if (directoryError) {
+                WA2DriveLog([NSString stringWithFormat:@"cannot create diagnostics directory: %@",
+                             directoryError.localizedDescription]);
+            } else {
+                NSString *reportPath = [reportDirectory stringByAppendingPathComponent:@"diagnostics.txt"];
+                NSError *writeError = nil;
+                NSString *report = [lines componentsJoinedByString:@"\n"];
+                [report writeToFile:reportPath
+                         atomically:YES
+                           encoding:NSUTF8StringEncoding
+                              error:&writeError];
+
+                if (writeError) {
+                    WA2DriveLog([NSString stringWithFormat:@"cannot write diagnostics: %@",
+                                 writeError.localizedDescription]);
+                } else {
+                    WA2DriveLog([NSString stringWithFormat:@"diagnostics written to %@", reportPath]);
+                }
+            }
+        }
+
+        WA2DriveLog([NSString stringWithFormat:@"loaded in bundle %@; host-container database found=%@",
+                     bundleID, foundDatabase ? @"YES" : @"NO"]);
     }
 }
 
-%end
+__attribute__((constructor))
+static void WA2DriveConstructor(void) {
+    @autoreleasepool {
+        WA2DriveLog(@"dylib constructor executed");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            WA2DriveWriteDiagnostics();
+        });
+    }
+}
