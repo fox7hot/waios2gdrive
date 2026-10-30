@@ -13,18 +13,16 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set up Theos Environment
-      run: "git clone --recursive https://github.com ~/theos"
-        
-    - name: Set Environment Paths
+    - name: Install Theos Using Native Package Manager
       run: |
-        echo "THEOS=~/theos" >> $GITHUB_ENV
-        
-    - name: Download iOS SDK Headers
+        brew install theos
+        echo "THEOS=/opt/homebrew/opt/theos" >> $GITHUB_ENV
+
+    - name: Setup System SDK
       run: |
-        mkdir -p ~/theos/sdks
-        curl -LO "https://github.com"
-        tar -xf iPhoneOS16.5.sdk.tar.xz -C ~/theos/sdks/
+        mkdir -p /opt/homebrew/opt/theos/sdks
+        curl -L -o /opt/homebrew/opt/theos/sdks/iPhoneOS.sdk.tar.xz "https://github.com"
+        tar -xf /opt/homebrew/opt/theos/sdks/iPhoneOS.sdk.tar.xz -C /opt/homebrew/opt/theos/sdks/
         
     - name: Compile Dynamic Library
       run: |
